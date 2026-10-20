@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CBT - Pengawas (Online Server)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; user-select: none; -webkit-tap-highlight-color: transparent;}
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 h-screen w-screen overflow-hidden flex flex-col">
+
+    <!-- LOGIN ADMIN -->
+    <div id="view-login" class="flex-1 flex flex-col justify-center px-4 bg-slate-900">
+        <div class="bg-white w-full rounded-2xl shadow-2xl overflow-hidden">
+            <div class="bg-indigo-600 p-6 text-center border-b-4 border-indigo-400 relative">
+                <div id="connStatusLogin" class="absolute top-3 right-3 text-[10px] text-white/90 flex items-center gap-1 font-bold bg-black/20 px-2 py-1 rounded-full">
+                    <i class="fas fa-circle-notch fa-spin"></i> Menyambungkan...
+                </div>
+                <i class="fas fa-user-shield text-4xl text-white mb-2 mt-4"></i>
+                <h1 class="text-xl font-black text-white tracking-widest">LOGIN PENGAWAS</h1>
+            </div>
+            <div class="p-6">
+                <form onsubmit="handleLogin(event)">
+                    <div class="mb-4">
+                        <label class="block text-xs font-bold mb-1 text-slate-500 uppercase tracking-wider">ID Admin</label>
+                        <input type="text" id="adminId" required class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-600 font-mono text-lg transition-all outline-none">
+                    </div>
+                    <div class="mb-6">
+                        <label class="block text-xs font-bold mb-1 text-slate-500 uppercase tracking-wider">Kata Sandi</label>
+                        <input type="password" id="adminPass" required class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-600 text-lg transition-all outline-none">
+                    </div>
+                    <button type="submit" id="btnLogin" disabled class="w-full bg-slate-400 text-white font-black py-4 rounded-xl uppercase tracking-wider shadow-lg transition-colors">TUNGGU SERVER...</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- DASHBOARD ADMIN -->
+    <div id="view-admin" class="hidden h-full flex flex-col w-full bg-slate-100">
+        
+        <header class="bg-slate-900 px-4 py-3 flex justify-between items-center shadow-md z-10 shrink-0">
+            <div class="flex items-center gap-3 text-white">
+                <i class="fas fa-satellite-dish text-xl text-emerald-400 animate-pulse"></i>
+                <div class="leading-tight">
+                    <h2 class="text-sm font-black tracking-widest">SERVER PENGAWAS</h2>
+                    <span class="text-[10px] text-emerald-400 font-bold block" id="loggedAdminId">Tersambung (Online)</span>
+                </div>
+            </div>
+            <button onclick="location.reload()" class="bg-red-600 active:bg-red-700 text-white p-2 rounded-lg text-xs font-bold shadow"><i class="fas fa-power-off"></i></button>
+        </header>
+        
+        <main class="flex-1 overflow-y-auto p-4 space-y-4">
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Mengerjakan</p>
+                    <h3 class="text-3xl font-black text-amber-500 leading-none" id="statKerja">0</h3>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase mb-1">Selesai / Total</p>
+                    <div class="flex items-baseline gap-1">
+                        <h3 class="text-3xl font-black text-emerald-500 leading-none" id="statSelesai">0</h3>
+                        <span class="text-sm font-bold text-slate-400">/ 100</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="relative bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <i class="fas fa-search absolute left-4 top-3.5 text-slate-400 text-sm"></i>
+                <input type="number" inputmode="numeric" id="searchInput" onkeyup="renderList()" placeholder="Cari ID Peserta (cth: 1370)..." class="w-full pl-10 pr-4 py-3 outline-none text-sm font-bold">
+            </div>
+
+            <div id="participantList" class="space-y-3 pb-6">
+                <!-- Data Realtime dari Server dimuat di sini -->
+            </div>
+            
+        </main>
+    </div>
+
+    <script>
+        const ADMINS = {
+            '52031': 'AD581', '52032': 'AM742', '52033': 'AX193', '52034': 'BN864', '52035': 'CK257',
+            '52036': 'DR908', '52037': 'ET346', '52038': 'FV721', '52039': 'GW185', '52040': 'HZ634'
+        };
+
+        const PARTICIPANT_LIST = [
+            '1370', '1371', '1372', '1373', '1374', '1375', '1376', '1377', '1378', '1379',
+            '1380', '1381', '1382', '1383', '1384', '1385', '1386', '1387', '1388', '1389',
+            '1390', '1391', '1392', '1393', '1394', '1395', '1396', '1397', '1398', '1399',
+            '1400', '1401', '1402', '1403', '1404', '1405', '1406', '1407', '1408', '1409',
+            '1410', '1411', '1412', '1413', '1414', '1415', '1416', '1417', '1418', '1419',
+            '1420', '1421', '1422', '1423', '1424', '1425', '1426', '1427', '1428', '1429',
+            '1430', '1431', '1432', '1433', '1434', '1435', '1436', '1437', '1438', '1439',
+            '1440', '1441', '1442', '1443', '1444', '1445', '1446', '1447', '1448', '1449',
+            '1450', '1451', '1452', '1453', '1454', '1455', '1456', '1457', '1458', '1459',
+            '1460', '1461', '1462', '1463', '1464', '1465', '1466', '1467', '1468', '1469'
+        ]; 
+
+        const TOPIC_PREFIX = 'CBT_EXAM_2026_SECRET_99';
+        const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+        let participantsData = {}; 
+
+        client.on('connect', () => {
+            document.getElementById('connStatusLogin').innerHTML = '<i class="fas fa-check-circle text-green-400"></i> Server Online';
+            const btn = document.getElementById('btnLogin');
+            btn.disabled = false;
+            btn.className = 'w-full bg-indigo-600 active:bg-indigo-800 text-white font-black py-4 rounded-xl uppercase tracking-wider shadow-lg transition-colors cursor-pointer';
+            btn.innerText = 'MASUK SISTEM';
+
+            client.subscribe(`${TOPIC_PREFIX}/state/#`);
+            client.publish(`${TOPIC_PREFIX}/cmd/ALL`, JSON.stringify({command: 'PING'}));
+        });
+
+        client.on('error', (err) => {
+            document.getElementById('connStatusLogin').innerHTML = '<i class="fas fa-exclamation-triangle text-red-400"></i> Diblokir Sistem';
+            const btn = document.getElementById('btnLogin');
+            btn.className = 'w-full bg-red-600 text-white font-black py-4 rounded-xl uppercase tracking-wider shadow-lg transition-colors cursor-not-allowed';
+            btn.innerText = 'KONEKSI GAGAL (BUKA VIA HTML)';
+        });
+
+        client.on('message', (topic, message) => {
+            if (topic.startsWith(`${TOPIC_PREFIX}/state/`)) {
+                const pId = topic.split('/').pop();
+                try {
+                    participantsData[pId] = JSON.parse(message.toString());
+                    renderList();
+                } catch(e){}
+            }
+        });
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const id = document.getElementById('adminId').value.trim();
+            const pass = document.getElementById('adminPass').value;
+
+            if (ADMINS[id] && ADMINS[id] === pass) {
+                document.getElementById('view-login').classList.add('hidden');
+                document.getElementById('view-admin').classList.remove('hidden');
+                renderList(); 
+            } else {
+                alert('Akses Ditolak! Kredensial Admin Salah.');
+            }
+        }
+
+        function renderList() {
+            const searchQuery = document.getElementById('searchInput').value.trim();
+            let html = '';
+            let countKerja = 0, countSelesai = 0;
+            
+            PARTICIPANT_LIST.forEach(pId => {
+                const data = participantsData[pId] || { status: 'Belum Login', progress: '0/30', isBlocked: false };
+                
+                const status = data.status;
+                const progress = data.progress || '0/30'; // cth: "12/30"
+                const isBlocked = data.isBlocked;
+
+                // Hitung Persentase & Jumlah Soal Dikerjakan
+                const parts = progress.split('/');
+                const answeredNum = parseInt(parts[0]) || 0;
+                const totalNum = parseInt(parts[1]) || 30;
+                const percentage = Math.round((answeredNum / totalNum) * 100);
+
+                if (!isBlocked && status === 'Mengerjakan') countKerja++;
+                if (!isBlocked && status === 'Selesai') countSelesai++;
+
+                if (searchQuery && !pId.includes(searchQuery)) return;
+
+                let statusBadge = `<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-bold uppercase border">Belum Login</span>`;
+                if (status === 'Mengerjakan') statusBadge = `<span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase border border-amber-200 animate-pulse">Mengerjakan</span>`;
+                if (status === 'Selesai') statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase border border-emerald-200">Selesai</span>`;
+                if (isBlocked) statusBadge = `<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase border border-red-200">Terblokir</span>`;
+
+                let actionBtn = '';
+                if (isBlocked) {
+                    actionBtn = `<button onclick="toggleBlock('${pId}', false)" class="w-full bg-emerald-50 text-emerald-700 border border-emerald-300 active:bg-emerald-200 py-2 rounded-xl text-xs font-black uppercase tracking-wider mt-3 shadow-sm transition-colors"><i class="fas fa-unlock mr-1"></i> Buka Blokir</button>`;
+                } else {
+                    actionBtn = `<button onclick="toggleBlock('${pId}', true)" class="w-full bg-red-50 text-red-600 border border-red-200 active:bg-red-200 py-2 rounded-xl text-xs font-black uppercase tracking-wider mt-3 shadow-sm transition-colors"><i class="fas fa-lock mr-1"></i> Blokir Lintas Browser</button>`;
+                }
+
+                html += `
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 relative overflow-hidden">
+                        ${isBlocked ? '<div class="absolute left-0 top-0 bottom-0 w-1 bg-red-500"></div>' : '<div class="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"></div>'}
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <div class="font-mono font-black text-xl text-slate-800 leading-none">${pId}</div>
+                                <div class="text-[10px] text-slate-400 font-bold mt-1">ID PESERTA</div>
+                            </div>
+                            <div class="text-right">
+                                ${statusBadge}
+                                <div class="mt-2 font-bold text-slate-600 text-xs"><i class="fas fa-tasks text-indigo-500 mr-1"></i> ${answeredNum} dari ${totalNum} soal (${percentage}%)</div>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar Visual -->
+                        <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden mb-1">
+                            <div class="bg-indigo-600 h-2 rounded-full transition-all duration-300" style="width: ${percentage}%"></div>
+                        </div>
+
+                        ${actionBtn}
+                    </div>
+                `;
+            });
+
+            document.getElementById('participantList').innerHTML = html;
+            document.getElementById('statKerja').innerText = countKerja;
+            document.getElementById('statSelesai').innerText = countSelesai;
+        }
+
+        function toggleBlock(pId, blockStatus) {
+            if (blockStatus && !confirm(`Blokir ID ${pId} lintas perangkat?\nPeserta akan langsung dikunci seketika.`)) {
+                return;
+            }
+            
+            const command = blockStatus ? 'BLOCK' : 'UNBLOCK';
+            client.publish(`${TOPIC_PREFIX}/cmd/${pId}`, JSON.stringify({command: command}));
+            
+            if (!participantsData[pId]) participantsData[pId] = { status: 'Belum Login', progress: '0/30' };
+            participantsData[pId].isBlocked = blockStatus;
+            
+            renderList();
+        }
+    </script>
+</body>
+</html>
